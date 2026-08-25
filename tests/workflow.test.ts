@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { openDatabase } from "../src/database/db"
@@ -11,6 +11,7 @@ import { event } from "../src/daemon/scheduler"
 import { cronMatches } from "../src/triggers/cron"
 import { findWorkflow } from "../src/workflow/loader"
 import { parseDuration, validateWorkspace } from "../src/workflow/validation"
+import { executionLogPath } from "../src/logging/execution"
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -20,10 +21,10 @@ describe("workflow execution", () => {
   test("chains node output and persists run and step history", async () => {
     const root = workspace(); mkdirSync(join(root, "workflows"), { recursive: true }); mkdirSync(join(root, "nodes"), { recursive: true })
     writeFileSync(join(root, "workflows", "chain.workflow.ts"), `export default { id: "chain", trigger: { type: "manual" }, steps: [{ id: "one", node: "../nodes/one.ts" }, { id: "two", node: "../nodes/two.ts" }] }`)
-    writeFileSync(join(root, "nodes", "one.ts"), `export async function run(ctx) { return { value: ctx.input.value + 1 } }`)
+    writeFileSync(join(root, "nodes", "one.ts"), `export async function run(ctx) { ctx.log.info("ctx message"); console.log("console message"); return { value: ctx.input.value + 1 } }`)
     writeFileSync(join(root, "nodes", "two.ts"), `export default { input: { parse(value) { if (typeof value.value !== "number") throw new Error("invalid"); return value } }, async run(ctx) { return { value: ctx.input.value * 2 } } }`)
     const item = await findWorkflow(root, "chain"); expect(item).not.toBeNull(); const db = openDatabase(join(root, "data", "test.db")); const record = createRun(db, item!.definition, item!.path, event("manual", { value: 2 })); markRunRunning(db, record.id, process.pid)
-    expect(await executeWorkflow(db, { ...record, status: "running" }, root)).toEqual({ value: 6 }); expect(getRun(db, record.id)?.status).toBe("success"); expect(stepsForRun(db, record.id)).toHaveLength(2); db.close()
+    expect(await executeWorkflow(db, { ...record, status: "running" }, root)).toEqual({ value: 6 }); expect(getRun(db, record.id)?.status).toBe("success"); expect(stepsForRun(db, record.id)).toHaveLength(2); const log = readFileSync(executionLogPath(root, "chain", record.id), "utf8"); expect(log).toContain("ctx message"); expect(log).toContain("console message"); expect(log).toContain("Execution completed successfully"); db.close()
   })
 
   test("persists node failures without throwing into the daemon", async () => {

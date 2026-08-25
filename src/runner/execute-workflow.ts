@@ -1,21 +1,26 @@
 import type { Database } from "bun:sqlite"
-import { dirname, join, resolve } from "node:path"
+import { dirname, resolve } from "node:path"
 import { errorMessage, parseJson, stringify } from "../lib/json"
+import { appendExecutionLog, initializeExecutionLog } from "../logging/execution"
 import type { RunRecord, TriggerEvent, WorkflowDefinition } from "../workflow/types"
 import { loadWorkflow } from "../workflow/loader"
 import { executeNode } from "./execute-node"
 
 export async function executeWorkflow(db: Database, run: RunRecord, workspace: string): Promise<unknown> {
-  const workflow = await loadWorkflow(run.workflow_path, true); const event = parseJson(run.trigger_payload, {}) as TriggerEvent
-  let input: unknown = event.data; const logPath = join(workspace, "data", "logs", `${run.id}.log`)
+  initializeExecutionLog(workspace, run.workflow_id, run.id)
+  appendExecutionLog(workspace, run.workflow_id, run.id, "INFO", "runner", "Loading workflow")
   try {
+    const workflow = await loadWorkflow(run.workflow_path, true); const event = parseJson(run.trigger_payload, {}) as TriggerEvent
+    let input: unknown = event.data
+    appendExecutionLog(workspace, run.workflow_id, run.id, "INFO", "runner", `Started ${workflow.steps.length} step(s)`)
     for (const [position, step] of workflow.steps.entries()) {
       const started = new Date().toISOString(); const insert = db.prepare("INSERT INTO step_runs (workflow_run_id,step_id,position,status,input_json,started_at) VALUES (?,?,?,?,?,?)").run(run.id, step.id, position, "running", stringify(input), started)
-      try { input = await executeNode({ workflow, workflowPath: run.workflow_path, step, runId: run.id, event, input, logPath }); db.prepare("UPDATE step_runs SET status='success',output_json=?,finished_at=? WHERE id=?").run(stringify(input), new Date().toISOString(), Number(insert.lastInsertRowid)) }
-      catch (error) { const message = errorMessage(error); db.prepare("UPDATE step_runs SET status='failed',error=?,finished_at=? WHERE id=?").run(message, new Date().toISOString(), Number(insert.lastInsertRowid)); throw error }
+      appendExecutionLog(workspace, run.workflow_id, run.id, "INFO", "runner", `Starting step ${position + 1}: ${step.id}`)
+      try { input = await executeNode({ workflow, workflowPath: run.workflow_path, step, runId: run.id, event, input, workspace }); db.prepare("UPDATE step_runs SET status='success',output_json=?,finished_at=? WHERE id=?").run(stringify(input), new Date().toISOString(), Number(insert.lastInsertRowid)); appendExecutionLog(workspace, run.workflow_id, run.id, "INFO", "runner", `Completed step ${position + 1}: ${step.id}`) }
+      catch (error) { const message = errorMessage(error); db.prepare("UPDATE step_runs SET status='failed',error=?,finished_at=? WHERE id=?").run(message, new Date().toISOString(), Number(insert.lastInsertRowid)); appendExecutionLog(workspace, run.workflow_id, run.id, "ERROR", "runner", `Failed step ${position + 1}: ${step.id}`, message); throw error }
     }
-    db.prepare("UPDATE workflow_runs SET status='success',output_json=?,finished_at=?,runner_pid=NULL WHERE id=?").run(stringify(input), new Date().toISOString(), run.id); return input
-  } catch (error) { db.prepare("UPDATE workflow_runs SET status='failed',error=?,finished_at=?,runner_pid=NULL WHERE id=?").run(errorMessage(error), new Date().toISOString(), run.id); throw error }
+    db.prepare("UPDATE workflow_runs SET status='success',output_json=?,finished_at=?,runner_pid=NULL WHERE id=?").run(stringify(input), new Date().toISOString(), run.id); appendExecutionLog(workspace, run.workflow_id, run.id, "INFO", "runner", "Execution completed successfully"); return input
+  } catch (error) { const message = errorMessage(error); db.prepare("UPDATE workflow_runs SET status='failed',error=?,finished_at=?,runner_pid=NULL WHERE id=?").run(message, new Date().toISOString(), run.id); appendExecutionLog(workspace, run.workflow_id, run.id, "ERROR", "runner", "Execution failed", message); throw error }
 }
 
 export async function executePoll(workflow: WorkflowDefinition, workflowPath: string, runId: string, previousState: unknown, workspace: string): Promise<{ state: unknown; events?: unknown[] }> {

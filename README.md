@@ -96,8 +96,11 @@ my-automations/
 ├── .gitignore
 ├── workflows/            # workflow definitions
 ├── nodes/                # executable TypeScript nodes
-└── data/
-    └── logs/             # SQLite data and per-run logs
+├── data/                 # SQLite runtime state
+└── executions/
+    └── <workflow-id>/
+        └── <execution-id>/
+            └── execution.log
 ```
 
 Create and run a manual workflow:
@@ -338,6 +341,14 @@ aitomator logs --run <run-id> --follow
 ```
 
 Use `--lines N` to control the initial tail and press `Ctrl+C` to stop following.
+
+Every run creates a permanent execution log immediately at:
+
+```text
+executions/<workflowId>/<executionId>/execution.log
+```
+
+The file combines daemon lifecycle messages, runner and step lifecycle messages, `ctx.log.*` output, and ordinary `console.*` calls made by nodes. Runs with no node output still receive an execution log. Existing installations can continue reading legacy `data/logs/<executionId>.log` files through the same CLI commands.
 
 Workflow definitions are watched and hot-reloaded when valid. Invalid updates are rejected, leaving the previous valid registry active. Node files and dependency changes are naturally refreshed because every run starts a new process.
 

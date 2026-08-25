@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
 import { openDatabase } from "../database/db"
 import { getRun, listRuns } from "../database/runs"
+import { executionLogPath, legacyExecutionLogPath } from "../logging/execution"
 
 export interface FollowLogOptions {
   workspace: string
@@ -17,7 +17,6 @@ export interface FollowLogOptions {
 
 export async function followWorkflowLogs(options: FollowLogOptions): Promise<void> {
   const db = openDatabase(options.database)
-  const logDir = join(options.workspace, "data", "logs")
   const offsets = new Map<string, number>()
   const initialRuns = options.initialRuns ?? 20
   const lines = options.lines ?? 100
@@ -34,7 +33,9 @@ export async function followWorkflowLogs(options: FollowLogOptions): Promise<voi
       const records = options.runId ? [getRun(db, options.runId)!] : listRuns(db, 500, options.workflowId)
 
       for (const [index, record] of records.entries()) {
-        const path = join(logDir, `${record.id}.log`)
+        const current = executionLogPath(options.workspace, record.workflow_id, record.id)
+        const legacy = legacyExecutionLogPath(options.workspace, record.id)
+        const path = existsSync(current) ? current : legacy
         if (!existsSync(path)) continue
 
         const content = readFileSync(path)
