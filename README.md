@@ -1,8 +1,6 @@
 # AItomator
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/miguelangarano/aitomator/main/assets/aitomator-banner.png" alt="AItomator isometric architecture: four triggers flow into the daemon, SQLite state, and isolated parallel runners" width="100%">
-</p>
+![AItomator](assets/aitomator-banner.png)
 
 > A tiny, agent-friendly TypeScript workflow daemon for automation without a workflow platform.
 

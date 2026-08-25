@@ -27,6 +27,7 @@
   "files": [
     "src",
     "skill",
+    "assets",
     "README.md",
     "LICENSE",
     "SECURITY.md",
