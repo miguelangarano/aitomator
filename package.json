@@ -1,0 +1,20 @@
+{
+  "name": "aitomator",
+  "version": "0.1.0",
+  "description": "A tiny, agent-friendly TypeScript workflow daemon",
+  "type": "module",
+  "module": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "bin": { "aitomator": "./src/cli/index.ts" },
+  "files": ["src", "skill", "templates", "README.md", "LICENSE"],
+  "scripts": {
+    "start": "bun run src/cli/index.ts",
+    "dev": "bun --watch run src/cli/index.ts start",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun build src/cli/index.ts src/runner/main.ts --target=bun --outdir=dist"
+  },
+  "engines": { "bun": ">=1.1.0" },
+  "devDependencies": { "@types/bun": "latest", "typescript": "^5" },
+  "license": "MIT"
+}

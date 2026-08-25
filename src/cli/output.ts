@@ -1,0 +1,5 @@
+export function hasFlag(args: string[], flag: string): boolean { return args.includes(flag) }
+export function option(args: string[], name: string): string | undefined { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : undefined }
+export function positional(args: string[], index = 0): string | undefined { return args.filter((arg, i) => !arg.startsWith("-") && (i === 0 || !args[i - 1]?.startsWith("--") || !["--input", "--format", "--trigger", "--workflow", "--run", "--limit"].includes(args[i - 1]!)))[index] }
+export function print(value: unknown, json = false): void { if (!json && process.argv.includes("--quiet")) return; if (json) console.log(JSON.stringify(value, null, 2)); else console.log(value) }
+export function fail(code: string, message: string, exitCode = 1, details?: unknown): never { if (process.argv.includes("--json")) console.error(JSON.stringify({ ok: false, code, message, details }, null, 2)); else console.error(`Error: ${message}`); process.exit(exitCode) }
