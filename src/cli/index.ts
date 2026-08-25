@@ -14,15 +14,16 @@ import { findWorkflow, loadWorkflows } from "../workflow/loader"
 import { validateWorkspace } from "../workflow/validation"
 import { createNode, createWorkflow, initWorkspace } from "./scaffold"
 import { fail, hasFlag, option, print } from "./output"
-import { activateService, deactivateService, installService, servicePath, uninstallService } from "./service"
+import { activateService, controlService, deactivateService, enableUserLinger, installService, isServiceActive, isServiceInstalled, servicePath, showServiceLogs, uninstallService } from "./service"
 
 const argv = process.argv.slice(2), command = argv[0], args = argv.slice(1), json = hasFlag(argv, "--json")
+const packageVersion = (JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "package.json"), "utf8")) as { version: string }).version
 
 try {
   switch (command) {
     case "init": await init(); break
-    case "start": await startDaemon(); break
-    case "stop": await daemonAction("shutdown", "Stopped AItomator"); break
+    case "start": await start(); break
+    case "stop": await stop(); break
     case "restart": await restart(); break
     case "status": await status(); break
     case "logs": await logs(); break
@@ -37,7 +38,7 @@ try {
     case "service": await service(); break
     case "capabilities": capabilities(); break
     case "skill": skill(); break
-    case "version": case "--version": case "-v": console.log("AItomator v0.1.0"); break
+    case "version": case "--version": case "-v": console.log(`AItomator v${packageVersion}`); break
     case "help": case "--help": case "-h": case undefined: help(); break
     default: fail("UNKNOWN_COMMAND", `Unknown command: ${command}`, 1)
   }
@@ -48,13 +49,25 @@ async function init(): Promise<void> {
   print(json ? { ok: true, workspace: root, created } : created.length ? `Initialized AItomator in ${root}\n${created.map(p => `  created ${relative(root, p)}`).join("\n")}` : `AItomator is already initialized in ${root}`, json)
 }
 
+async function start(): Promise<void> {
+  if (!hasFlag(args, "--background")) return startDaemon()
+  const workspace = findWorkspace(), path = installService(workspace), activation = activateService(path), linger = enableUserLinger()
+  if (!activation.active) fail("SERVICE_START_FAILED", activation.message ?? "Unable to start background service", 1)
+  print(json ? { ok: true, background: true, path, linger } : `AItomator is running in the background\nService: ${path}${linger.enabled ? "\nStarts automatically at boot" : `\nWarning: could not enable start-at-boot after logout: ${linger.message}`}`, json)
+}
+
+async function stop(): Promise<void> {
+  if (isServiceInstalled() && isServiceActive()) { const result = controlService("stop"); if (!result.ok) fail("SERVICE_STOP_FAILED", result.output, 1); return print(json ? { ok: true, background: true } : "Stopped AItomator background service", json) }
+  await daemonAction("shutdown", "Stopped AItomator")
+}
+
 async function status(): Promise<void> {
   const socket = join(runtimeDir(findWorkspace()), "aitomator.sock")
   try { const response = await controlRequest(socket, { action: "status" }); print(json ? response : `AItomator is running (pid ${response.pid}, ${response.workflows} workflows)`, json) }
   catch { const result = { ok: false, running: false, message: "AItomator daemon is not running" }; if (json) print(result, true); else console.log(result.message); process.exitCode = 6 }
 }
 async function daemonAction(action: string, message: string): Promise<void> { const result = await controlRequest(join(runtimeDir(findWorkspace()), "aitomator.sock"), { action }); if (!result.ok) throw new Error(result.message); if (message) print(json ? result : message, json) }
-async function restart(): Promise<void> { try { await daemonAction("shutdown", "") } catch {}; await Bun.sleep(150); await startDaemon() }
+async function restart(): Promise<void> { if (isServiceInstalled()) { const result = controlService("restart"); if (!result.ok) fail("SERVICE_RESTART_FAILED", result.output, 1); return print(json ? { ok: true, background: true } : "Restarted AItomator background service", json) } try { await daemonAction("shutdown", "") } catch {}; await Bun.sleep(150); await startDaemon() }
 
 async function workflow(): Promise<void> {
   const sub = args[0], rest = args.slice(1), config = await loadAItomatorConfig()
@@ -115,15 +128,15 @@ async function runs(): Promise<void> {
 
 async function validate(): Promise<void> { const config = await loadAItomatorConfig(), id = args.find(a => !a.startsWith("-")); const result = await validateWorkspace(config.workspace, id); print(json ? result : result.valid ? `Valid: ${result.workflows} workflow${result.workflows === 1 ? "" : "s"}` : formatErrors(result.errors), json); if (!result.valid) process.exitCode = 5 }
 async function graph(): Promise<void> { const id = args[0]; if (!id) fail("USAGE", "Usage: aitomator graph <workflow> [--format ascii|compact|mermaid|json]", 2); const config = await loadAItomatorConfig(), item = await findWorkflow(config.workspace, id); if (!item) fail("WORKFLOW_NOT_FOUND", `Workflow not found: ${id}`, 3); const format = hasFlag(args, "--compact") ? "compact" : (option(args, "--format") ?? "ascii"); if (!["ascii", "compact", "mermaid", "json"].includes(format)) fail("INVALID_FORMAT", `Unknown graph format: ${format}`, 2); console.log(renderGraph(item.definition, format as any)) }
-async function logs(): Promise<void> { const config = await loadAItomatorConfig(), dir = join(config.workspace, "data", "logs"), runId = option(args, "--run"); let files = runId ? [`${runId}.log`] : existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(".log")).sort().reverse() : []; const workflowId = option(args, "--workflow"); if (workflowId) { const db = openDatabase(config.database), ids = new Set(listRuns(db, 500, workflowId).map(r => `${r.id}.log`)); db.close(); files = files.filter(f => ids.has(f)) } process.stdout.write(files.slice(0, Number(option(args, "--limit") ?? 20)).map(f => existsSync(join(dir, f)) ? readFileSync(join(dir, f), "utf8") : "").join("") || "No logs found\n") }
+async function logs(): Promise<void> { const config = await loadAItomatorConfig(); if (hasFlag(args, "--daemon")) { const code = await showServiceLogs(config.workspace, hasFlag(args, "--follow"), Number(option(args, "--lines") ?? 100)); if (code) process.exitCode = code; return } const dir = join(config.workspace, "data", "logs"), runId = option(args, "--run"); let files = runId ? [`${runId}.log`] : existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith(".log")).sort().reverse() : []; const workflowId = option(args, "--workflow"); if (workflowId) { const db = openDatabase(config.database), ids = new Set(listRuns(db, 500, workflowId).map(r => `${r.id}.log`)); db.close(); files = files.filter(f => ids.has(f)) } process.stdout.write(files.slice(0, Number(option(args, "--limit") ?? 20)).map(f => existsSync(join(dir, f)) ? readFileSync(join(dir, f), "utf8") : "").join("") || "No logs found\n") }
 async function doctor(): Promise<void> { const config = await loadAItomatorConfig(), validation = await validateWorkspace(config.workspace); const checks = [{ name: "bun", ok: Boolean(Bun.version), detail: Bun.version }, { name: "workspace", ok: existsSync(config.workspace), detail: config.workspace }, { name: "config", ok: existsSync(join(config.workspace, "aitomator.config.ts")), detail: join(config.workspace, "aitomator.config.ts") }, { name: "database", ok: (() => { try { openDatabase(config.database).close(); return true } catch { return false } })(), detail: config.database }, { name: "workflows", ok: validation.valid, detail: `${validation.workflows} found` }]; print(json ? { ok: checks.every(c => c.ok), checks, validation } : checks.map(c => `${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`).join("\n"), json); if (!checks.every(c => c.ok)) process.exitCode = 1 }
 
 async function deps(): Promise<void> { const sub = args[0], packages = args.slice(1).filter(a => !a.startsWith("-")), workspace = findWorkspace(); if (sub === "list") { const pkg = JSON.parse(readFileSync(join(workspace, "package.json"), "utf8")), dependencies = pkg.dependencies ?? {}; print(json ? { dependencies } : Object.entries(dependencies).map(([k, v]) => `${k}@${v}`).join("\n"), json) } else if (sub === "add" || sub === "remove") { if (!packages.length) fail("USAGE", `Usage: aitomator deps ${sub} <package...>`, 2); const child = Bun.spawn([process.execPath, sub, ...packages], { cwd: workspace, stdout: "inherit", stderr: "inherit", stdin: "inherit" }); const code = await child.exited; if (code) process.exit(code) } else if (sub === "sync") { const child = Bun.spawn([process.execPath, "install"], { cwd: workspace, stdout: "inherit", stderr: "inherit", stdin: "inherit" }); const code = await child.exited; if (code) process.exit(code) } else fail("USAGE", "Usage: aitomator deps <add|remove|list|sync>", 2) }
-async function service(): Promise<void> { const sub = args[0], workspace = findWorkspace(); if (sub === "install") { const path = installService(workspace), activation = activateService(path); print(json ? { ok: true, path, ...activation } : activation.active ? `Installed and started AItomator via ${path}` : `Installed service definition at ${path}\nActivation was unavailable: ${activation.message ?? "unknown error"}`, json) } else if (sub === "uninstall") { const path = servicePath(); deactivateService(path); const removed = uninstallService(); print(json ? { ok: true, removed, path } : removed ? "Stopped and removed the AItomator service" : "Service definition was not installed", json) } else fail("USAGE", "Usage: aitomator service <install|uninstall>", 2) }
+async function service(): Promise<void> { const sub = args[0], workspace = findWorkspace(); if (sub === "install") { const path = installService(workspace), activation = activateService(path), linger = enableUserLinger(); print(json ? { ok: activation.active, path, ...activation, linger } : activation.active ? `Installed and started AItomator via ${path}${linger.enabled ? "\nStarts automatically at boot" : `\nWarning: ${linger.message}`}` : `Installed service definition at ${path}\nActivation was unavailable: ${activation.message ?? "unknown error"}`, json) } else if (sub === "uninstall") { const path = servicePath(); deactivateService(path); const removed = uninstallService(); print(json ? { ok: true, removed, path } : removed ? "Stopped and removed the AItomator service" : "Service definition was not installed", json) } else if (["start", "stop", "restart", "status"].includes(sub ?? "")) { if (!isServiceInstalled()) fail("SERVICE_NOT_INSTALLED", "Run aitomator start --background first", 3); const result = controlService(sub as "start" | "stop" | "restart" | "status"); if (json) print({ ok: result.ok, action: sub, output: result.output }, true); else if (result.output) console.log(result.output); else console.log(`${sub} completed`); if (!result.ok) process.exitCode = 1 } else if (sub === "logs") { const code = await showServiceLogs(workspace, hasFlag(args, "--follow"), Number(option(args, "--lines") ?? 100)); if (code) process.exitCode = code } else fail("USAGE", "Usage: aitomator service <install|uninstall|start|stop|restart|status|logs>", 2) }
 
-function capabilities(): void { print({ version: "0.1.0", runtime: "bun", triggers: ["http", "cron", "poll", "manual"], nodeLanguage: "typescript", features: { parallelRuns: true, schemas: true, env: true, sqlite: true, hotReload: true, backgroundService: true, workflowGraphs: true } }, json) }
+function capabilities(): void { print({ version: packageVersion, runtime: "bun", triggers: ["http", "cron", "poll", "manual"], nodeLanguage: "typescript", features: { parallelRuns: true, schemas: true, env: true, sqlite: true, hotReload: true, backgroundService: true, workflowGraphs: true } }, json) }
 function skill(): void { const markdown = readFileSync(join(import.meta.dir, "..", "..", "skill", "skill.md"), "utf8"); print(json ? { format: "markdown", content: markdown } : markdown, json) }
 function publicRun(run: any): any { return { id: run.id, workflow: run.workflow_id, trigger: run.trigger_type, status: run.status, queuedAt: run.queued_at, startedAt: run.started_at, finishedAt: run.finished_at, output: parseJson(run.output_json), error: run.error } }
 function formatErrors(errors: any[]): string { return errors.map(e => `${e.workflow ? `${e.workflow}: ` : ""}${e.path}: ${e.message}`).join("\n") }
 function formatRun(run: any): string { return [`Workflow: ${run.workflow}`, `Run: ${run.id}`, `Status: ${run.status}`, "", "Steps", ...run.steps.map((s: any) => `  ${s.position + 1}. ${s.step_id.padEnd(24)} ${s.status}`), ...(run.error ? ["", "Error", `  ${run.error}`] : [])].join("\n") }
-function help(): void { console.log(`AItomator - a tiny, agent-friendly TypeScript workflow daemon\n\nUsage: aitomator <command> [options]\n\n  init                         Initialize a workspace\n  start | stop | restart       Control the daemon\n  status | logs                Inspect the daemon and logs\n  workflow <command>           Create, list, describe, enable, disable, remove, reload\n  node <create|inspect>        Manage TypeScript nodes\n  run <workflow>               Start a manual run\n  runs <list|get|retry>        Inspect run history\n  validate [workflow]          Validate workflow files\n  graph <workflow>             Render ascii, compact, Mermaid, or JSON\n  deps <add|remove|list|sync>  Manage shared dependencies\n  service <install|uninstall>  Manage the background service\n  capabilities --json         Discover machine-readable capabilities\n  skill [--json]               Print the bundled agent guide\n  doctor                       Run diagnostics\n\nGlobal conventions: --json, --quiet, --non-interactive`) }
+function help(): void { console.log(`AItomator - a tiny, agent-friendly TypeScript workflow daemon\n\nUsage: aitomator <command> [options]\n\n  init                         Initialize a workspace\n  start [--background]         Start in foreground or as an always-on service\n  stop | restart | status      Control the daemon or background service\n  logs [--daemon] [--follow]   Inspect workflow or daemon logs\n  workflow <command>           Create, list, describe, enable, disable, remove, reload\n  node <create|inspect>        Manage TypeScript nodes\n  run <workflow>               Start a manual run\n  runs <list|get|retry>        Inspect run history\n  validate [workflow]          Validate workflow files\n  graph <workflow>             Render ascii, compact, Mermaid, or JSON\n  deps <add|remove|list|sync>  Manage shared dependencies\n  service <command>            Manage and inspect the background service\n  capabilities --json         Discover machine-readable capabilities\n  skill [--json]               Print the bundled agent guide\n  doctor                       Run diagnostics\n\nGlobal conventions: --json, --quiet, --non-interactive`) }

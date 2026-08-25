@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "ghflow",
+      "name": "aitomator",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5",

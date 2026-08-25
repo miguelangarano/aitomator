@@ -26,16 +26,20 @@ You can also dispatch it with GitHub CLI:
 gh workflow run publish.yml --ref main -f version=0.2.0
 ```
 
-## npm authentication
+## npm Trusted Publishing
 
-The workflow currently supports an npm automation token through the GitHub environment secret `NPM_TOKEN`. Create a GitHub environment named `npm`, optionally add required reviewers, then add `NPM_TOKEN` to that environment.
+The workflow is OIDC-only. It does not use or accept a long-lived `NPM_TOKEN`. It grants `id-token: write`, runs on a GitHub-hosted runner, and uses an OIDC-capable npm CLI.
 
-After the first package publication, the preferred setup is npm Trusted Publishing:
+### Configure the trusted publisher
 
 1. Open the `aitomator` package settings on npmjs.com.
-2. Add a GitHub Actions trusted publisher for `miguelangarano/aitomator`.
-3. Enter `publish.yml` as the workflow filename and `npm` as the environment.
-4. Allow `npm publish`.
-5. Remove the `NPM_TOKEN` environment secret. The workflow already grants `id-token: write` and uses a compatible npm CLI, so npm will authenticate through OIDC and generate provenance automatically.
+2. Add a **GitHub Actions** trusted publisher.
+3. Set organization or user to `miguelangarano`.
+4. Set repository to `aitomator`.
+5. Set workflow filename to `publish.yml` (filename only).
+6. Set environment to `npm`.
+7. Allow `npm publish`.
 
-The initial publication normally requires the token because trusted-publisher settings are attached to an existing npm package.
+In the GitHub repository, create an environment named `npm`. No npm secret is required. You may add required reviewers to make production releases require approval.
+
+You can then publish through **Actions → Publish to npm → Run workflow** using a new version. npm authenticates through short-lived OIDC credentials and generates provenance automatically.

@@ -306,6 +306,14 @@ Run it in the foreground:
 aitomator start
 ```
 
+Or install and start it as an always-on background service:
+
+```bash
+aitomator start --background
+```
+
+On Linux, AItomator also enables user lingering when permitted so the service starts at boot and continues after logout. If the operating system requires administrator authorization, the command reports the exact limitation instead of hiding it.
+
 Control it from another terminal in the same workspace:
 
 ```bash
@@ -313,6 +321,13 @@ aitomator status
 aitomator workflow reload
 aitomator stop
 aitomator restart
+```
+
+View daemon output without calling `journalctl` or `log` directly:
+
+```bash
+aitomator logs --daemon
+aitomator logs --daemon --follow
 ```
 
 Workflow definitions are watched and hot-reloaded when valid. Invalid updates are rejected, leaving the previous valid registry active. Node files and dependency changes are naturally refreshed because every run starts a new process.
@@ -324,6 +339,18 @@ Install and start a per-user systemd service on Linux or a launchd service on ma
 ```bash
 cd /path/to/my-automations
 aitomator service install
+```
+
+`aitomator start --background` is the shorter equivalent.
+
+All service operations are available through the CLI:
+
+```bash
+aitomator service status
+aitomator service restart
+aitomator service stop
+aitomator service start
+aitomator service logs --follow
 ```
 
 Remove it with:
@@ -406,11 +433,12 @@ Nodes can import any package installed in the workspace.
 ```text
 aitomator init
 
-aitomator start
+aitomator start [--background]
 aitomator stop
 aitomator restart
 aitomator status
 aitomator logs [--workflow ID | --run ID]
+aitomator logs --daemon [--follow] [--lines N]
 
 aitomator workflow create <id> --trigger manual|http|cron|poll
 aitomator workflow list
@@ -433,7 +461,7 @@ aitomator graph <workflow> [--format ascii|compact|mermaid|json]
 aitomator doctor
 
 aitomator deps add|remove|list|sync
-aitomator service install|uninstall
+aitomator service install|uninstall|start|stop|restart|status|logs
 aitomator capabilities --json
 aitomator skill [--json]
 ```
