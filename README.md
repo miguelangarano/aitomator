@@ -330,6 +330,15 @@ aitomator logs --daemon
 aitomator logs --daemon --follow
 ```
 
+Follow one workflow across its current and future runs, or follow one specific run:
+
+```bash
+aitomator logs --workflow github-agent --follow
+aitomator logs --run <run-id> --follow
+```
+
+Use `--lines N` to control the initial tail and press `Ctrl+C` to stop following.
+
 Workflow definitions are watched and hot-reloaded when valid. Invalid updates are rejected, leaving the previous valid registry active. Node files and dependency changes are naturally refreshed because every run starts a new process.
 
 ## Background service
@@ -437,7 +446,7 @@ aitomator start [--background]
 aitomator stop
 aitomator restart
 aitomator status
-aitomator logs [--workflow ID | --run ID]
+aitomator logs [--workflow ID | --run ID] [--follow] [--lines N]
 aitomator logs --daemon [--follow] [--lines N]
 
 aitomator workflow create <id> --trigger manual|http|cron|poll

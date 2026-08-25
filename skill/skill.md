@@ -15,6 +15,8 @@ Use this loop:
 
 For an always-on daemon, run `aitomator start --background`. Inspect its service output with `aitomator logs --daemon --follow`; stop or restart it with the ordinary `aitomator stop` and `aitomator restart` commands.
 
+Stream logs for a workflow, including new runs created while following, with `aitomator logs --workflow <id> --follow`. Use `aitomator logs --run <run-id> --follow` for one run.
+
 Node output becomes the next node's input. Return `ctx.input` to preserve input. Nodes can read `process.env`, `Bun.env`, or `ctx.env`; `.env` and `.env.local` follow Bun behavior. Workflow source is trusted local code, not sandboxed. Use scoped credentials and never put secrets in node outputs.
 
 Triggers are `manual`, `http`, `cron`, and `poll`. Poll nodes return `{ state, events? }`; state is persisted and each explicit event starts one run. Runs execute in fresh Bun processes. Global and per-workflow concurrency use a durable SQLite queue; overflow can be `queue` or `drop`.
