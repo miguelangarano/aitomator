@@ -4,7 +4,7 @@ import { dirname, join } from "node:path"
 export function initWorkspace(root: string): string[] {
   const created: string[] = []; for (const dir of ["workflows", "nodes", "data", "executions"]) mkdirSync(join(root, dir), { recursive: true })
   create(join(root, "aitomator.config.ts"), `import { defineConfig } from "aitomator"\n\nexport default defineConfig({\n  database: "./data/aitomator.db",\n  http: { host: "127.0.0.1", port: 8787 },\n  concurrency: { maxRuns: 2, defaultWorkflowMaxRuns: 1 },\n  logging: { level: "info" },\n})\n`, created)
-  create(join(root, "package.json"), `${JSON.stringify({ name: "aitomator-workspace", private: true, type: "module", dependencies: { aitomator: "^0.1.0" } }, null, 2)}\n`, created)
+  create(join(root, "package.json"), `${JSON.stringify({ name: "aitomator-workspace", private: true, type: "module", dependencies: { aitomator: "^0.2.0" } }, null, 2)}\n`, created)
   create(join(root, ".env.example"), "# API_TOKEN=\n", created); create(join(root, ".gitignore"), ".env\n.env.local\ndata/\nexecutions/\n.aitomator/\nnode_modules/\n", created)
   return created
 }
