@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, readFileSync, unlinkSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
+import { configuredEnvironment } from "../config/environment"
 import { loadAItomatorConfig } from "../config/load-config"
 import { openDatabase } from "../database/db"
 import { createRun, getRun, listRuns, markRunRunning, retryRun, setWorkflowEnabled, stepsForRun } from "../database/runs"
@@ -111,7 +112,7 @@ async function run(): Promise<void> {
   catch {
     const db = openDatabase(config.database), record = createRun(db, item.definition, item.path, event("manual", input))
     initializeExecutionLog(config.workspace, record.workflow_id, record.id); appendExecutionLog(config.workspace, record.workflow_id, record.id, "INFO", "cli", "Execution queued from manual trigger")
-    const runner = join(import.meta.dir, "..", "runner", "main.ts"), child = Bun.spawn([process.execPath, runner, "--run-id", record.id, "--database", config.database, "--workspace", config.workspace], { cwd: config.workspace, env: process.env, stdin: "ignore", stdout: "inherit", stderr: "inherit" }); markRunRunning(db, record.id, child.pid); appendExecutionLog(config.workspace, record.workflow_id, record.id, "INFO", "cli", `Runner started pid=${child.pid}`)
+    const runner = join(import.meta.dir, "..", "runner", "main.ts"), child = Bun.spawn([process.execPath, runner, "--run-id", record.id, "--database", config.database, "--workspace", config.workspace], { cwd: config.workspace, env: configuredEnvironment(config), stdin: "ignore", stdout: "inherit", stderr: "inherit" }); markRunRunning(db, record.id, child.pid); appendExecutionLog(config.workspace, record.workflow_id, record.id, "INFO", "cli", `Runner started pid=${child.pid}`)
     const exitCode = await child.exited, finished = getRun(db, record.id); appendExecutionLog(config.workspace, record.workflow_id, record.id, exitCode === 0 ? "INFO" : "ERROR", "cli", `Runner exited code=${exitCode} status=${finished?.status ?? "unknown"}`); result = { ok: exitCode === 0, runId: record.id, workflow: id, status: finished?.status ?? "failed", output: parseJson(finished?.output_json), error: finished?.error }
     if (exitCode !== 0) { db.close(); if (json) print(result, true); process.exit(7) }
     db.close()

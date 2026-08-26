@@ -1,10 +1,10 @@
 # Releasing AItomator
 
-The workflow at `.github/workflows/publish.yml` supports two release paths.
+The workflow at `.github/workflows/publish.yml` publishes only after a pull request from a `release/*` branch is merged into `main`.
 
 ## Release branch
 
-Set the version in `package.json`, create or update a branch whose name starts with `release/`, and push it:
+Create a branch whose name starts with `release/`, set the version in `package.json`, and push it:
 
 ```bash
 npm version 0.2.0 --no-git-tag-version
@@ -14,17 +14,13 @@ git commit -m "Release 0.2.0"
 git push -u origin release/0.2.0
 ```
 
-Every push to `release/**` runs validation and attempts to publish the version currently stored in `package.json`. npm versions are immutable, so another push with the same version fails before publishing.
-
-## Manual release
-
-Open **GitHub → Actions → Publish to npm → Run workflow**, select a ref, and enter the required semantic version. The workflow applies that version to the package inside the runner and publishes it. It does not commit the version change back to the repository.
-
-You can also dispatch it with GitHub CLI:
+Open a pull request against `main` and merge it after review:
 
 ```bash
-gh workflow run publish.yml --ref main -f version=0.2.0
+gh pr create --base main --head release/0.2.0 --title "Release 0.2.0"
 ```
+
+Closing the pull request without merging, merging a branch that does not start with `release/`, and pushing directly to either `main` or a release branch do not publish. npm versions are immutable, so the workflow rejects a version that is already published.
 
 ## npm Trusted Publishing
 
@@ -42,4 +38,4 @@ The workflow is OIDC-only. It does not use or accept a long-lived `NPM_TOKEN`. I
 
 In the GitHub repository, create an environment named `npm`. No npm secret is required. You may add required reviewers to make production releases require approval.
 
-You can then publish through **Actions → Publish to npm → Run workflow** using a new version. npm authenticates through short-lived OIDC credentials and generates provenance automatically.
+Merging a release pull request then publishes through short-lived OIDC credentials and generates provenance automatically.

@@ -1,15 +1,11 @@
 name: Publish to npm
 
 on:
-  push:
+  pull_request:
     branches:
-      - "release/**"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Semantic version to publish (for example: 0.2.0 or 1.0.0-beta.1)"
-        required: true
-        type: string
+      - main
+    types:
+      - closed
 
 permissions:
   contents: read
@@ -22,10 +18,9 @@ concurrency:
 jobs:
   publish:
     name: Validate and publish
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
     environment: npm
-    env:
-      MANUAL_VERSION: ${{ inputs.version }}
 
     steps:
       - name: Check out repository
@@ -46,19 +41,11 @@ jobs:
       - name: Use an OIDC-capable npm CLI
         run: npm install --global npm@12
 
-      - name: Apply and validate release version
+      - name: Read and validate release version
         id: package
         shell: bash
         run: |
           set -euo pipefail
-
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            if [[ ! "${MANUAL_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-              echo "Invalid semantic version: ${MANUAL_VERSION}" >&2
-              exit 1
-            fi
-            npm pkg set "version=${MANUAL_VERSION}"
-          fi
 
           PACKAGE_NAME="$(node -p "require('./package.json').name")"
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
@@ -76,7 +63,7 @@ jobs:
         run: |
           if npm view "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" version >/dev/null 2>&1; then
             echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published." >&2
-            echo "Bump package.json on release/* pushes, or enter a new version for manual releases." >&2
+            echo "Bump package.json on the release/* branch before merging it." >&2
             exit 1
           fi
 

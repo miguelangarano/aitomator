@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { applyConfiguredEnvironment } from "../config/environment"
 import { loadAItomatorConfig } from "../config/load-config"
 import { openDatabase } from "../database/db"
 import { recoverInterruptedRuns } from "../database/runs"
@@ -13,7 +14,8 @@ import { controlRequest } from "./socket"
 import { startHttpServer } from "../triggers/http"
 
 export async function startDaemon(from = process.cwd()): Promise<void> {
-  const config = await loadAItomatorConfig(from), dir = runtimeDir(config.workspace); mkdirSync(dir, { recursive: true })
+  const config = await loadAItomatorConfig(from); applyConfiguredEnvironment(config)
+  const dir = runtimeDir(config.workspace); mkdirSync(dir, { recursive: true })
   const socketPath = join(dir, "aitomator.sock"), pidPath = join(dir, "aitomator.pid")
   if (existsSync(socketPath)) { try { const status = await controlRequest(socketPath, { action: "status" }); if (status.ok) throw new Error(`AItomator is already running (pid ${status.pid})`) } catch (error) { if (error instanceof Error && error.message.startsWith("AItomator is already")) throw error } }
   const db = openDatabase(config.database); recoverInterruptedRuns(db)

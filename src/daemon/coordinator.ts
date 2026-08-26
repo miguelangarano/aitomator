@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite"
 import { join } from "node:path"
+import { configuredEnvironment } from "../config/environment"
 import type { AItomatorConfig, TriggerEvent } from "../workflow/types"
 import { createRun, getRun, markRunRunning, queuedRuns, runningCount } from "../database/runs"
 import { appendExecutionLog, initializeExecutionLog } from "../logging/execution"
@@ -26,7 +27,7 @@ export class RunCoordinator {
   private spawn(runId: string): void {
     const run = getRun(this.db, runId); if (!run) return
     const runner = join(import.meta.dir, "..", "runner", "main.ts")
-    const child = Bun.spawn([process.execPath, runner, "--run-id", runId, "--database", this.config.database, "--workspace", this.config.workspace], { cwd: this.config.workspace, env: process.env, stdin: "ignore", stdout: "inherit", stderr: "inherit" })
+    const child = Bun.spawn([process.execPath, runner, "--run-id", runId, "--database", this.config.database, "--workspace", this.config.workspace], { cwd: this.config.workspace, env: configuredEnvironment(this.config), stdin: "ignore", stdout: "inherit", stderr: "inherit" })
     markRunRunning(this.db, runId, child.pid)
     appendExecutionLog(this.config.workspace, run.workflow_id, run.id, "INFO", "daemon", `Runner started pid=${child.pid}`)
     void child.exited.then(code => { const finished = getRun(this.db, run.id); appendExecutionLog(this.config.workspace, run.workflow_id, run.id, code === 0 ? "INFO" : "ERROR", "daemon", `Runner exited code=${code} status=${finished?.status ?? "unknown"}`); return this.pump() })

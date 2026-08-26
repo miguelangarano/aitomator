@@ -31,4 +31,5 @@ export interface AItomatorConfig {
   workspace: string; database: string; http: { host: string; port: number }
   concurrency: { maxRuns: number; defaultWorkflowMaxRuns: number }
   logging: { level: "debug" | "info" | "warn" | "error" }
+  env: Record<string, string>
 }

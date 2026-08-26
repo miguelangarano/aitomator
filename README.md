@@ -404,6 +404,10 @@ export default defineConfig({
   logging: {
     level: "info",
   },
+
+  env: {
+    PATH: `/path/to/custom/bin:${process.env.PATH}`,
+  },
 })
 ```
 
@@ -418,7 +422,7 @@ Environment overrides:
 | `AITOMATOR_MAX_RUNS` | Override global concurrency |
 | `AITOMATOR_LOG_LEVEL` | Set `debug`, `info`, `warn`, or `error` |
 
-Bun loads `.env` files automatically. Nodes can read variables through `process.env`, `Bun.env`, or `ctx.env`.
+Bun loads `.env` files automatically. Values in the config's `env` block override inherited environment variables and are propagated to workflow nodes and child processes. Nodes can read variables through `process.env`, `Bun.env`, or `ctx.env`.
 
 Secrets are not automatically copied to SQLite, but trigger payloads, node inputs and outputs, errors, and logs are persisted. Do not return or log secrets.
 
