@@ -1,6 +1,6 @@
 {
   "name": "aitomator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A tiny, agent-friendly TypeScript workflow daemon",
   "keywords": [
     "automation",
